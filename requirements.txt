@@ -1,12 +1,14 @@
+--only-binary=:all:
+--no-binary=:none:
 fastapi==0.109.2
 uvicorn[standard]==0.27.1
-playwright==1.41.2 --only-binary=all
+playwright==1.41.2
 beautifulsoup4==4.12.3
 markdownify==0.11.6
 google-generativeai==0.3.2
 python-multipart==0.0.9
-pydantic==2.6.1 --only-binary=all
-aiohttp==3.9.3 --only-binary=all
+pydantic==2.6.1
+aiohttp==3.9.3
 typing-extensions==4.9.0
 python-dotenv==1.0.1
 requests==2.31.0
@@ -15,10 +17,10 @@ certifi==2024.2.2
 charset-normalizer==3.3.2
 idna==3.6
 starlette==0.36.3
-anyio==4.3.0 --only-binary=all
+anyio==4.3.0
 click==8.1.7
 h11==0.14.0
-httptools==0.6.1 --only-binary=all
+httptools==0.6.1
 python-json-logger==2.0.7
-watchfiles==0.21.0 --only-binary=all
-websockets==12.0 --only-binary=all 
+watchfiles==0.21.0
+websockets==12.0 
