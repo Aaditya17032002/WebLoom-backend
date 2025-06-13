@@ -32,7 +32,7 @@ app = FastAPI(title="Web Crawler API", version="2.0.0")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://webloom-nuvanax.netlify.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,7 +51,7 @@ app.mount("/cdn", StaticFiles(directory=CDN_DIR), name="cdn")
 MAX_PAGES = 50
 RATE_LIMIT_DELAY = 1.5
 PROXY_LIST = [None]
-CDN_BASE_URL = "http://localhost:8000/cdn"  # Change this to your domain in production
+CDN_BASE_URL = "https://cdn.jsdelivr.net/gh/Aaditya17032002/webloom@main/schema_repo"
 
 # Configure Gemini
 GOOGLE_API_KEY = "AIzaSyCt4tDhsg7yn8n98J1ufXBsWpxVX9J7P_M"
@@ -349,107 +349,134 @@ def clean_content(html: str, url: str) -> Dict:
             "text_content": ""
         }
 
-def create_website_folder_structure(job_id: str, website_domain: str, pages_data: List[Dict]) -> tuple[str, str]:
-    """Create folder structure with individual JSON files for each page"""
-    
-    # Clean domain name for folder
-    clean_domain = re.sub(r'[^\w\-_.]', '_', website_domain)
-    website_folder = STORAGE_DIR / f"{clean_domain}_{job_id}"
-    website_folder.mkdir(exist_ok=True)
-    
-    # Create individual JSON files for each page
-    page_files = []
-    for i, page_data in enumerate(pages_data):
-        try:
-            # Generate individual JSON-LD for this page
-            json_ld = generate_json_ld(page_data)
-            
-            # Create filename from URL
-            url_path = urlparse(page_data['url']).path
-            if url_path == '/' or url_path == '':
-                filename = 'homepage.json'
-            else:
-                # Clean path for filename
-                filename = re.sub(r'[^\w\-_.]', '_', url_path.strip('/').replace('/', '_'))
-                if not filename.endswith('.json'):
-                    filename += '.json'
-            
-            # Ensure unique filename
-            file_path = website_folder / filename
-            counter = 1
-            while file_path.exists():
-                name, ext = filename.rsplit('.', 1)
-                file_path = website_folder / f"{name}_{counter}.{ext}"
-                counter += 1
-            
-            # Create comprehensive page data
-            page_json_data = {
-                "page_info": {
+def create_schema_repository(job_id: str, website_domain: str, pages_data: List[Dict]) -> str:
+    """Create repository structure for JSON-LD schema files"""
+    try:
+        # Create repository directory
+        repo_dir = Path("schema_repo")
+        repo_dir.mkdir(exist_ok=True)
+        
+        # Create website directory
+        clean_domain = website_domain.replace('.', '_').replace(':', '_')
+        website_dir = repo_dir / clean_domain
+        website_dir.mkdir(exist_ok=True)
+        
+        # Create individual JSON files for each page
+        page_files = []
+        for page_data in pages_data:
+            try:
+                # Generate individual JSON-LD for this page
+                json_ld = generate_json_ld(page_data)
+                
+                # Create filename from URL
+                url_path = urlparse(page_data['url']).path
+                if url_path == '/' or url_path == '':
+                    filename = 'homepage.json'
+                else:
+                    filename = re.sub(r'[^\w\-_.]', '_', url_path.strip('/').replace('/', '_'))
+                    if not filename.endswith('.json'):
+                        filename += '.json'
+                
+                # Ensure unique filename
+                file_path = website_dir / filename
+                counter = 1
+                while file_path.exists():
+                    name, ext = filename.rsplit('.', 1)
+                    file_path = website_dir / f"{name}_{counter}.{ext}"
+                    counter += 1
+                
+                # Create comprehensive page data
+                page_json_data = {
+                    "page_info": {
+                        "url": page_data['url'],
+                        "title": page_data['metadata']['title'],
+                        "description": page_data['metadata']['description'],
+                        "word_count": page_data['metadata']['word_count'],
+                        "crawled_at": datetime.now().isoformat(),
+                        "h1_tags": page_data['metadata']['h1_tags'],
+                        "h2_tags": page_data['metadata']['h2_tags'],
+                        "internal_links_count": len(page_data['metadata']['internal_links']),
+                        "external_links_count": len(page_data['metadata']['external_links'])
+                    },
+                    "json_ld": json_ld,
+                    "metadata": page_data['metadata'],
+                    "content_preview": page_data.get('text_content', '')[:1000]
+                }
+                
+                # Write individual page JSON file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(page_json_data, f, indent=2, ensure_ascii=False)
+                
+                page_files.append({
+                    "filename": file_path.name,
                     "url": page_data['url'],
-                    "title": page_data['metadata']['title'],
-                    "description": page_data['metadata']['description'],
-                    "word_count": page_data['metadata']['word_count'],
-                    "crawled_at": datetime.now().isoformat(),
-                    "h1_tags": page_data['metadata']['h1_tags'],
-                    "h2_tags": page_data['metadata']['h2_tags'],
-                    "internal_links_count": len(page_data['metadata']['internal_links']),
-                    "external_links_count": len(page_data['metadata']['external_links'])
-                },
-                "json_ld": json_ld,
-                "metadata": page_data['metadata'],
-                "content_preview": page_data.get('text_content', '')[:1000]
+                    "title": page_data['metadata']['title']
+                })
+                
+            except Exception as e:
+                logger.error(f"Error creating file for {page_data['url']}: {e}")
+                continue
+        
+        # Create README.md
+        readme_content = f"""# JSON-LD Schema Repository for {website_domain}
+
+This repository contains JSON-LD schema files for {website_domain}.
+
+## Usage
+
+Add the following script tag to your website:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/Aaditya17032002/webloom@main/schema_repo/{clean_domain}/schema-loader.js"></script>
+```
+
+The script will automatically:
+1. Detect the current page URL
+2. Load the appropriate JSON-LD schema
+3. Inject it into your page's head section
+
+## Files
+
+- `schema-loader.js`: Main loader script
+- `schema-loader.min.js`: Minified version of the loader
+- `index.json`: Index of all available schemas
+- Individual JSON files for each page
+
+## Last Updated
+
+{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+        
+        with open(website_dir / "README.md", "w", encoding="utf-8") as f:
+            f.write(readme_content)
+        
+        # Create schema loader script
+        create_schema_loader_script(website_dir, clean_domain, job_id, page_files)
+        
+        # Create index.json
+        index_data = {
+            "website": {
+                "domain": website_domain,
+                "crawl_date": datetime.now().isoformat(),
+                "total_pages": len(page_files),
+                "job_id": job_id
+            },
+            "pages": page_files,
+            "cdn_info": {
+                "base_url": f"{CDN_BASE_URL}/{clean_domain}",
+                "loader_url": f"{CDN_BASE_URL}/{clean_domain}/schema-loader.js",
+                "minified_url": f"{CDN_BASE_URL}/{clean_domain}/schema-loader.min.js"
             }
-            
-            # Write individual page JSON file
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(page_json_data, f, indent=2, ensure_ascii=False)
-            
-            page_files.append({
-                "filename": file_path.name,
-                "url": page_data['url'],
-                "title": page_data['metadata']['title']
-            })
-            
-        except Exception as e:
-            logger.error(f"Error creating file for {page_data['url']}: {e}")
-            continue
-    
-    # Create master index file
-    index_data = {
-        "website": {
-            "domain": website_domain,
-            "crawl_date": datetime.now().isoformat(),
-            "total_pages": len(page_files),
-            "job_id": job_id
-        },
-        "pages": page_files,
-        "usage_instructions": {
-            "self_hosted": "Copy all JSON files to your server and reference them individually",
-            "cdn_integration": f"Use our CDN: {CDN_BASE_URL}/{clean_domain}_{job_id}/",
-            "script_tag": f'<script src="{CDN_BASE_URL}/{clean_domain}_{job_id}/schema-loader.js"></script>'
         }
-    }
-    
-    with open(website_folder / 'index.json', 'w', encoding='utf-8') as f:
-        json.dump(index_data, f, indent=2, ensure_ascii=False)
-    
-    # Create schema loader script for CDN integration
-    create_schema_loader_script(website_folder, clean_domain, job_id, page_files)
-    
-    # Create ZIP file for download
-    zip_path = STORAGE_DIR / f"{clean_domain}_{job_id}.zip"
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for file_path in website_folder.rglob('*'):
-            if file_path.is_file():
-                zipf.write(file_path, file_path.relative_to(website_folder))
-    
-    # Copy to CDN directory for hosting
-    cdn_website_folder = CDN_DIR / f"{clean_domain}_{job_id}"
-    if cdn_website_folder.exists():
-        shutil.rmtree(cdn_website_folder)
-    shutil.copytree(website_folder, cdn_website_folder)
-    
-    return str(zip_path), f"{CDN_BASE_URL}/{clean_domain}_{job_id}/"
+        
+        with open(website_dir / "index.json", "w", encoding="utf-8") as f:
+            json.dump(index_data, f, indent=2, ensure_ascii=False)
+        
+        return f"{CDN_BASE_URL}/{clean_domain}/"
+        
+    except Exception as e:
+        logger.error(f"Error creating schema repository: {e}")
+        raise
 
 def create_schema_loader_script(folder_path: Path, domain: str, job_id: str, page_files: List[Dict]):
     """Create a JavaScript file that automatically loads appropriate JSON-LD schema"""
@@ -462,7 +489,7 @@ def create_schema_loader_script(folder_path: Path, domain: str, job_id: str, pag
 (function() {{
     'use strict';
     
-    const SCHEMA_BASE_URL = '{CDN_BASE_URL}/{domain}_{job_id}/';
+    const SCHEMA_BASE_URL = '{CDN_BASE_URL}/{domain}/';
     const PAGE_SCHEMAS = {json.dumps(page_files, indent=4)};
     
     function getCurrentPageSchema() {{
@@ -564,95 +591,6 @@ def create_schema_loader_script(folder_path: Path, domain: str, job_id: str, pag
     minified_path = folder_path / 'schema-loader.min.js'
     with open(minified_path, 'w', encoding='utf-8') as f:
         f.write(minified_content)
-    """Generate JSON-LD schema with better error handling"""
-    try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
-
-        def classify_content_type(md_text: str, metadata: Dict) -> str:
-            lower_text = md_text.lower()
-            title = metadata.get('title', '').lower()
-            
-            # More sophisticated content type detection
-            if any(word in lower_text for word in ['faq', 'frequently asked', 'questions and answers']):
-                return "FAQPage"
-            elif any(word in lower_text for word in ['buy now', 'add to cart', 'purchase', 'price', '$', '₹']):
-                return "Product"
-            elif any(word in title + lower_text for word in ['service', 'consulting', 'solution']):
-                return "Service"
-            elif any(word in lower_text for word in ['about us', 'about', 'company', 'team', 'history']):
-                return "AboutPage"
-            elif any(word in lower_text for word in ['contact', 'reach us', 'get in touch', 'address']):
-                return "ContactPage"
-            elif any(word in lower_text for word in ['blog', 'article', 'news', 'post', 'published']):
-                return "Article"
-            else:
-                return "WebPage"
-
-        content_type = classify_content_type(page_data['markdown'], page_data['metadata'])
-        content_snippet = page_data['markdown'][:3000]  # Reasonable limit for API
-
-        prompt = f"""
-        Generate a comprehensive JSON-LD schema for this webpage. Focus on creating rich, semantic markup that will help search engines and AI systems understand the content.
-
-        Page Details:
-        URL: {page_data['url']}
-        Title: {page_data['metadata']['title']}
-        Description: {page_data['metadata']['description']}
-        Content Type: {content_type}
-        H1 Tags: {page_data['metadata']['h1_tags'][:3]}
-        H2 Tags: {page_data['metadata']['h2_tags'][:5]}
-        Word Count: {page_data['metadata']['word_count']}
-
-        Content Preview:
-        {content_snippet}
-
-        Requirements:
-        1. Use schema.org vocabulary with @context
-        2. Include appropriate @type based on content analysis
-        3. Add Organization schema if business-related
-        4. Include BreadcrumbList for navigation
-        5. Add relevant properties like name, description, url
-        6. Include dateModified as current date
-        7. Add author/publisher information when applicable
-        8. Ensure all URLs are absolute
-
-        Return only valid JSON-LD without markdown formatting.
-        """
-
-        response = model.generate_content(prompt)
-        json_ld_text = response.text.strip()
-
-        # Clean response
-        if json_ld_text.startswith("```json"):
-            json_ld_text = json_ld_text.replace("```json", "").replace("```", "").strip()
-        elif json_ld_text.startswith("```"):
-            json_ld_text = json_ld_text.replace("```", "").strip()
-
-        json_ld = json.loads(json_ld_text)
-        
-        # Validate and ensure required fields
-        if not isinstance(json_ld, dict):
-            raise ValueError("Generated JSON-LD is not a valid object")
-            
-        # Ensure context and type are present
-        json_ld["@context"] = json_ld.get("@context", "https://schema.org")
-        if "@type" not in json_ld:
-            json_ld["@type"] = content_type
-            
-        return json_ld
-
-    except Exception as e:
-        logger.error(f"Error generating JSON-LD for {page_data['url']}: {e}")
-        # Return fallback schema
-        return {
-            "@context": "https://schema.org",
-            "@type": "WebPage",
-            "name": page_data['metadata']['title'] or "Untitled Page",
-            "url": page_data['url'],
-            "description": page_data['metadata']['description'] or "No description available",
-            "dateModified": datetime.now().isoformat(),
-            "wordCount": page_data['metadata']['word_count']
-        }
 
 # === CRAWLER ===
 class AsyncCrawler:
@@ -755,47 +693,14 @@ class AsyncCrawler:
                 # Rate limiting
                 await asyncio.sleep(RATE_LIMIT_DELAY)
 
-            # Generate individual page files
-            logger.info(f"Creating individual JSON files for {len(self.results)} pages")
+            # Generate schema repository
+            logger.info(f"Creating schema repository for {len(self.results)} pages")
             website_domain = urlparse(self.start_url).netloc
-            zip_path, cdn_url = create_website_folder_structure(self.job_id, website_domain, self.results)
+            cdn_url = create_schema_repository(self.job_id, website_domain, self.results)
             
-            # Generate consolidated JSON-LD for backward compatibility
-            json_ld_data = {
-                "website": website_domain,
-                "crawl_date": datetime.now().isoformat(),
-                "total_pages_crawled": len(self.results),
-                "errors": self.errors,
-                "cdn_url": cdn_url,
-                "download_url": f"/download-folder/{self.job_id}",
-                "integration": {
-                    "cdn_script": f'<script src="{cdn_url}schema-loader.js"></script>',
-                    "self_hosted": "Download the ZIP file and host the JSON files on your server"
-                },
-                "pages": []
-            }
-            
-            for page in self.results:
-                try:
-                    page_schema = {
-                        "url": page['url'],
-                        "title": page['metadata']['title'],
-                        "word_count": page['metadata']['word_count'],
-                        "json_ld": generate_json_ld(page)
-                    }
-                    json_ld_data["pages"].append(page_schema)
-                except Exception as e:
-                    error_msg = f"Error generating JSON-LD for {page['url']}: {str(e)}"
-                    self.errors.append(error_msg)
-                    logger.error(error_msg)
-            
-            # Update final job status
-            crawl_jobs[self.job_id]["json_ld_data"] = json_ld_data
-            crawl_jobs[self.job_id]["status"] = "completed"
-            crawl_jobs[self.job_id]["progress"] = len(self.visited)
-            crawl_jobs[self.job_id]["errors"] = self.errors
+            # Update job status with CDN information
             crawl_jobs[self.job_id]["cdn_url"] = cdn_url
-            crawl_jobs[self.job_id]["download_url"] = f"/download-folder/{self.job_id}"
+            crawl_jobs[self.job_id]["status"] = "completed"
             
             logger.info(f"Crawl completed for job {self.job_id}. Processed {len(self.results)} pages with {len(self.errors)} errors")
             
@@ -857,30 +762,6 @@ async def get_crawl_status(job_id: str):
     
     return crawl_jobs[job_id]
 
-@app.get("/download-folder/{job_id}")
-async def download_folder(job_id: str):
-    """Download the complete website folder as ZIP"""
-    if job_id not in crawl_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = crawl_jobs[job_id]
-    if job["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Crawl not completed")
-    
-    # Find the ZIP file
-    website_domain = urlparse(job["config"]["start_url"]).netloc
-    clean_domain = re.sub(r'[^\w\-_.]', '_', website_domain)
-    zip_path = STORAGE_DIR / f"{clean_domain}_{job_id}.zip"
-    
-    if not zip_path.exists():
-        raise HTTPException(status_code=404, detail="Download file not found")
-    
-    return FileResponse(
-        path=zip_path,
-        filename=f"{clean_domain}_schema_files.zip",
-        media_type='application/zip'
-    )
-
 @app.get("/cdn-info/{job_id}")
 async def get_cdn_info(job_id: str):
     """Get CDN integration information"""
@@ -894,12 +775,38 @@ async def get_cdn_info(job_id: str):
     website_domain = urlparse(job["config"]["start_url"]).netloc
     clean_domain = re.sub(r'[^\w\-_.]', '_', website_domain)
     
+    # Get all page-specific CDN URLs
+    page_cdns = []
+    for page in job["completed_pages"]:
+        url_path = urlparse(page["url"]).path
+        if url_path == '/' or url_path == '':
+            filename = 'homepage.json'
+        else:
+            filename = re.sub(r'[^\w\-_.]', '_', url_path.strip('/').replace('/', '_'))
+            if not filename.endswith('.json'):
+                filename += '.json'
+        
+        page_cdns.append({
+            "page_url": page["url"],
+            "page_title": page["title"],
+            "cdn_url": f"{job['cdn_url']}{filename}",
+            "schema_type": page.get("schema_type", "WebPage"),
+            "word_count": page["word_count"],
+            "description": page["description"]
+        })
+    
     return {
+        "website": {
+            "domain": website_domain,
+            "total_pages": len(page_cdns),
+            "crawl_date": job["start_time"]
+        },
         "cdn_base_url": job["cdn_url"],
         "script_url": f"{job['cdn_url']}schema-loader.js",
         "script_url_min": f"{job['cdn_url']}schema-loader.min.js",
         "integration_code": f'<script src="{job["cdn_url"]}schema-loader.js"></script>',
         "integration_code_min": f'<script src="{job["cdn_url"]}schema-loader.min.js"></script>',
+        "page_schemas": page_cdns,
         "usage_instructions": {
             "step1": "Copy the script tag below",
             "step2": "Paste it in the <head> section of your website",
@@ -909,11 +816,11 @@ async def get_cdn_info(job_id: str):
                 "Dynamic schema injection",
                 "No manual configuration required",
                 "Works with SPAs and traditional websites"
-            ]
-        },
-        "api_endpoints": {
-            "list_files": f"{job['cdn_url']}index.json",
-            "individual_pages": f"{job['cdn_url']}[filename].json"
+            ],
+            "manual_integration": {
+                "description": "If you prefer to manually integrate specific schemas, you can use the individual CDN URLs below",
+                "example": '<script type="application/ld+json" src="[CDN_URL]"></script>'
+            }
         }
     }
 
