@@ -1,13 +1,13 @@
 --only-binary=:all:
 --no-binary=:none:
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
+fastapi
+uvicorn[standard]
 playwright==1.41.2
 beautifulsoup4==4.12.3
 markdownify==0.11.6
-google-generativeai==0.3.2
+google-generativeai
 python-multipart==0.0.9
-pydantic==2.6.1
+pydantic
 aiohttp
 typing-extensions==4.9.0
 python-dotenv==1.0.1
