@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: web-crawler-api
+    env: python
+    buildCommand: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source "$HOME/.cargo/env"
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      playwright install chromium
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: GOOGLE_API_KEY
+        sync: false 
